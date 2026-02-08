@@ -2,8 +2,8 @@ name: Daily Speedtest
 
 on:
   schedule:
-    - cron: '0 22 * * *'
-  workflow_dispatch:
+    - cron: '0 22 * * *' # 每天北京时间早上6点运行
+  workflow_dispatch: # 允许手动点击运行
 
 permissions:
   contents: write
@@ -17,22 +17,32 @@ jobs:
 
       - name: Download CloudflareST
         run: |
-          wget -N https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.4/cfst_linux_arm64.tar.gz
-          tar -zxf cfst_linux_arm64.tar.gz
-          chmod +x CloudflareST
+          # 使用你提供的 v2.3.4 AMD64 链接
+          wget -N https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.4/cfst_linux_amd64.tar.gz
+          tar -zxf cfst_linux_amd64.tar.gz
+          # v2.3.4 解压后的文件名为 cfst
+          chmod +x cfst
+          # 将其重命名为 CloudflareST 以兼容后续命令
+          mv cfst CloudflareST
           ./CloudflareST -v
 
       - name: Run Speedtest
         run: |
-          ./CloudflareST -tp 443 -tl 300 -dn 5 -o result.csv || echo "Speedtest had issues but continuing"
+          # 针对 GitHub Actions 环境，放宽延迟上限到 350ms
+          # 如果 350ms 内找不到 IP，脚本会自动记录失败日志并继续
+          ./CloudflareST -tp 443 -tl 350 -dn 10 -o result.csv || echo "测速未找到匹配IP"
 
       - name: Extract Best IPs
         run: |
           if [ -f result.csv ]; then
+            # 提取第一列 IP 到 ip.txt
             awk -F, 'NR>1 {print $1}' result.csv > ip.txt
+            echo "✅ 已找到最新优选 IP："
             cat ip.txt
           else
+            # 测速失败时的保底方案：使用你之前测出的极品香港 IP
             echo "104.17.16.10" > ip.txt
+            echo "104.17.18.155" >> ip.txt
           fi
 
       - name: Commit and Push
@@ -40,5 +50,6 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add ip.txt
+          # 如果内容没变，git commit 会报错，使用 || exit 0 忽略它
           git commit -m "Update best IPs" || exit 0
           git push
