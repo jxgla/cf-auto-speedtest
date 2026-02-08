@@ -1,0 +1,44 @@
+name: Daily Speedtest
+
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  speedtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download CloudflareST
+        run: |
+          wget -N https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.2.5/CloudflareSpeedTest_linux_amd64.tar.gz
+          tar -zxf CloudflareSpeedTest_linux_amd64.tar.gz
+          chmod +x CloudflareST
+          ./CloudflareST -v
+
+      - name: Run Speedtest
+        run: |
+          ./CloudflareST -tp 443 -tl 300 -dn 5 -o result.csv || echo "Speedtest had issues but continuing"
+
+      - name: Extract Best IPs
+        run: |
+          if [ -f result.csv ]; then
+            awk -F, 'NR>1 {print $1}' result.csv > ip.txt
+            cat ip.txt
+          else
+            echo "104.17.16.10" > ip.txt
+          fi
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add ip.txt
+          git commit -m "Update best IPs" || exit 0
+          git push
