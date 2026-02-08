@@ -35,12 +35,14 @@ jobs:
       - name: Extract Best IPs
         run: |
           if [ -f result.csv ]; then
-            # 提取第一列 IP 到 ip.txt
-            awk -F, 'NR>1 {print $1}' result.csv > ip.txt
-            echo "✅ 已找到最新优选 IP："
+            # 核心修改：增加了 | head -n 20
+            # 意思是：只取 result.csv 里速度最快的前 20 个 IP
+            awk -F, 'NR>1 {print $1}' result.csv | head -n 20 > ip.txt
+            
+            echo "✅ 已提取最快的前 20 个 IP："
             cat ip.txt
           else
-            # 测速失败时的保底方案：使用你之前测出的极品香港 IP
+            echo "⚠️ 测速失败，使用保底 IP"
             echo "104.17.16.10" > ip.txt
             echo "104.17.18.155" >> ip.txt
           fi
