@@ -1,0 +1,56 @@
+name: Daily Speedtest
+
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  speedtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download CloudflareST
+        run: |
+          # 修正：使用真实存在的 v2.2.5 版本
+          wget -N https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.2.5/CloudflareSpeedTest_linux_amd64.tar.gz
+          # 解压
+          tar -zxf CloudflareSpeedTest_linux_amd64.tar.gz
+          # 赋予执行权限
+          chmod +x CloudflareST
+          # 打印一下版本，证明工具活着
+          ./CloudflareST -v
+
+      - name: Run Speedtest
+        run: |
+          # 运行测速
+          # -tl 300: 延迟上限放宽到300ms (GitHub服务器在国外，延迟通常较高)
+          # -dn 5: 只取最快的5个，减少运行时间
+          ./CloudflareST -tp 443 -tl 300 -dn 5 -o result.csv || echo "Speedtest had issues but continuing"
+
+      - name: Extract Best IPs
+        run: |
+          if [ -f result.csv ]; then
+            # 提取 IP 到 ip.txt
+            awk -F, 'NR>1 {print $1}' result.csv > ip.txt
+            echo "✅ Success! Found IPs:"
+            cat ip.txt
+          else
+            echo "⚠️ No IP found, using backup."
+            # 保底：如果测速全失败，写入一个保底的香港 IP，防止断网
+            echo "104.17.16.10" > ip.txt
+          fi
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add ip.txt
+          # 如果文件没变化(IP没变)，不报错直接退出
+          git commit -m "Update best IPs" || exit 0
+          git push
